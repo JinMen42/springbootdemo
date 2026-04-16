@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>用户管理系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            max-width: 900px;
+        }
+
+        h1, h2 {
+            margin-top: 24px;
+        }
+
+        .section {
+            border: 1px solid #ddd;
+            padding: 16px;
+            margin-bottom: 16px;
+            border-radius: 8px;
+        }
+
+        input {
+            display: block;
+            margin: 8px 0 12px;
+            padding: 8px;
+            width: 320px;
+        }
+
+        button {
+            margin-right: 10px;
+            margin-bottom: 10px;
+            padding: 8px 14px;
+            cursor: pointer;
+        }
+
+        pre {
+            background: #f4f4f4;
+            padding: 12px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            min-height: 120px;
+        }
+    </style>
+</head>
+<body>
+<h1>Spring Boot 用户管理系统</h1>
+
+<div class="section">
+    <h2>1. 注册</h2>
+    <input id="registerUsername" placeholder="用户名">
+    <input id="registerPassword" placeholder="密码">
+    <input id="registerAge" type="number" placeholder="年龄">
+    <input id="registerEmail" placeholder="邮箱">
+    <button onclick="register()">注册</button>
+</div>
+
+<div class="section">
+    <h2>2. 登录</h2>
+    <input id="loginUsername" placeholder="用户名">
+    <input id="loginPassword" placeholder="密码">
+    <button onclick="login()">登录</button>
+    <button onclick="logout()">退出登录</button>
+    <button onclick="showToken()">显示 token</button>
+</div>
+
+<div class="section">
+    <h2>3. 当前登录用户</h2>
+    <button onclick="getProfile()">获取 profile</button>
+</div>
+
+<div class="section">
+    <h2>4. 用户查询</h2>
+    <button onclick="getAllUsers()">查询全部用户</button>
+
+    <input id="queryUserId" type="number" placeholder="按 id 查询用户">
+    <button onclick="getUserById()">按 id 查询</button>
+
+    <input id="pageNumber" type="number" placeholder="页码，从0开始">
+    <input id="pageSize" type="number" placeholder="每页条数">
+    <button onclick="getUserPage()">分页查询</button>
+
+    <input id="searchUsername" placeholder="按用户名模糊搜索">
+    <input id="searchPageNumber" type="number" placeholder="搜索页码，从0开始">
+    <input id="searchPageSize" type="number" placeholder="搜索每页条数">
+    <button onclick="searchUser()">条件查询</button>
+</div>
+
+<div class="section">
+    <h2>5. 更新用户</h2>
+    <input id="updateUserId" type="number" placeholder="要更新的用户 id">
+    <input id="updateUsername" placeholder="新用户名">
+    <input id="updatePassword" placeholder="新密码">
+    <input id="updateAge" type="number" placeholder="新年龄">
+    <input id="updateEmail" placeholder="新邮箱">
+    <button onclick="updateUser()">更新用户</button>
+</div>
+
+<div class="section">
+    <h2>6. 删除用户</h2>
+    <input id="deleteUserId" type="number" placeholder="要删除的用户 id">
+    <button onclick="deleteUser()">删除用户</button>
+</div>
+
+<div class="section">
+    <h2>返回结果</h2>
+    <pre id="result">这里显示接口返回结果</pre>
+</div>
+
+<script>
+    const resultEl = document.getElementById("result");
+
+    function showResult(data) {
+        resultEl.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function getToken() {
+        return localStorage.getItem("token");
+    }
+
+    function getAuthHeaders() {
+        const token = getToken();
+        return {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+        };
+    }
+
+    async function register() {
+        const body = {
+            username: document.getElementById("registerUsername").value,
+            password: document.getElementById("registerPassword").value,
+            age: Number(document.getElementById("registerAge").value),
+            email: document.getElementById("registerEmail").value
+        };
+
+        const response = await fetch("/api/users/register", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+
+    async function login() {
+        const body = {
+            username: document.getElementById("loginUsername").value,
+            password: document.getElementById("loginPassword").value
+        };
+
+        const response = await fetch("/api/users/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+
+        if (data.code === 200 && data.data) {
+            localStorage.setItem("token", data.data);
+        }
+
+        showResult(data);
+    }
+
+    function logout() {
+        localStorage.removeItem("token");
+        showResult({
+            code: 200,
+            msg: "已退出登录",
+            data: null
+        });
+    }
+
+    function showToken() {
+        showResult({
+            token: getToken()
+        });
+    }
+
+    async function getProfile() {
+        const response = await fetch("/api/users/profile", {
+            method: "GET",
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+
+    async function getAllUsers() {
+        const response = await fetch("/api/users", {
+            method: "GET",
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+
+    async function getUserById() {
+        const id = document.getElementById("queryUserId").value;
+
+        const response = await fetch("/api/users/id/" + id, {
+            method: "GET",
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+
+    async function getUserPage() {
+        const page = document.getElementById("pageNumber").value || 0;
+        const size = document.getElementById("pageSize").value || 5;
+
+        const response = await fetch(`/api/users/page?page=${page}&size=${size}`, {
+            method: "GET",
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+
+    async function searchUser() {
+        const username = document.getElementById("searchUsername").value;
+        const page = document.getElementById("searchPageNumber").value || 0;
+        const size = document.getElementById("searchPageSize").value || 5;
+
+        const response = await fetch(`/api/users/search?username=${encodeURIComponent(username)}&page=${page}&size=${size}`, {
+            method: "GET",
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+
+    async function updateUser() {
+        const id = document.getElementById("updateUserId").value;
+
+        const body = {
+            username: document.getElementById("updateUsername").value,
+            password: document.getElementById("updatePassword").value,
+            age: Number(document.getElementById("updateAge").value),
+            email: document.getElementById("updateEmail").value
+        };
+
+        const response = await fetch("/api/users/" + id, {
+            method: "PUT",
+            headers: getAuthHeaders(),
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+
+    async function deleteUser() {
+        const id = document.getElementById("deleteUserId").value;
+
+        const response = await fetch("/api/users/" + id, {
+            method: "DELETE",
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+        showResult(data);
+    }
+</script>
+</body>
+</html>
