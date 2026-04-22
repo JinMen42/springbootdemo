@@ -1,14 +1,9 @@
-### 登录并保存 token
-POST http://localhost:8080/api/users/login
+POST http://localhost:8080/api/users/register
 Content-Type: application/json
 
 {
-  "username": "tom",
-  "password": "123456"
+  "username": "tom100",
+  "password": "123456",
+  "age": 25,
+  "email": "tom100@test.com"
 }
-
-> {% client.global.set("auth_token", response.body.data); %}
-
-### 自动带 token 访问 profile
-GET http://localhost:8080/api/users/profile
-Authorization: Bearer {{auth_token}}

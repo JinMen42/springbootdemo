@@ -7,6 +7,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.type.TypeReference;
 
 import java.util.List;
 
@@ -14,10 +15,17 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    // 1. 注入我们写好的 Redis 缓存服务
+    private final RedisCacheService redisCacheService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    public UserService(UserRepository userRepository) {
+    // 统一定义缓存的 Key
+    private static final String ALL_USERS_CACHE_KEY = "users:all";
+
+    // 构造器注入
+    public UserService(UserRepository userRepository, RedisCacheService redisCacheService) {
         this.userRepository = userRepository;
+        this.redisCacheService = redisCacheService;
     }
 
     public User register(User user) {
@@ -29,16 +37,35 @@ public class UserService {
         String encodedPassword = passwordEncoder.encode(user.getPassword());
         user.setPassword(encodedPassword);
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+
+        // 【新增逻辑】数据库新增了数据，立马删除旧缓存！
+        redisCacheService.delete(ALL_USERS_CACHE_KEY);
+
+        return savedUser;
     }
 
     public User getByUsername(String username) {
         return userRepository.findByUsername(username);
     }
 
+    // ================= 【大改造：查询全部用户接入 Redis】 =================
     public List<User> getAll() {
-        return userRepository.findAll();
+        // 第一步：先查 Redis 缓存
+        List<User> cachedUsers = redisCacheService.get(ALL_USERS_CACHE_KEY, new TypeReference<List<User>>() {});
+        if (cachedUsers != null) {
+            return cachedUsers; // 缓存命中，直接返回！
+        }
+
+        // 第二步：缓存如果没有，查 MySQL 数据库
+        List<User> dbUsers = userRepository.findAll();
+
+        // 第三步：查到之后存进 Redis，设置 5 分钟过期
+        redisCacheService.set(ALL_USERS_CACHE_KEY, dbUsers, 5);
+
+        return dbUsers;
     }
+    // =================================================================
 
     public User getById(Long id) {
         return userRepository.findById(id).orElse(null);
@@ -60,7 +87,12 @@ public class UserService {
         oldUser.setAge(newUser.getAge());
         oldUser.setEmail(newUser.getEmail());
 
-        return userRepository.save(oldUser);
+        User updatedUser = userRepository.save(oldUser);
+
+        // 【新增逻辑】数据库更新了数据，立马删除旧缓存！
+        redisCacheService.delete(ALL_USERS_CACHE_KEY);
+
+        return updatedUser;
     }
 
     public User login(String username, String password) {
@@ -89,5 +121,8 @@ public class UserService {
 
     public void deleteById(Long id) {
         userRepository.deleteById(id);
+
+        // 【新增逻辑】数据库删除了数据，立马删除旧缓存！
+        redisCacheService.delete(ALL_USERS_CACHE_KEY);
     }
 }
