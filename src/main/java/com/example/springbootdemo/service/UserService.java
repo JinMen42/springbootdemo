@@ -36,9 +36,8 @@ public class UserService {
 
         String encodedPassword = passwordEncoder.encode(user.getPassword());
         user.setPassword(encodedPassword);
-
+        user.setRole("USER");
         User savedUser = userRepository.save(user);
-
         // 【新增逻辑】数据库新增了数据，立马删除旧缓存！
         redisCacheService.delete(ALL_USERS_CACHE_KEY);
 
@@ -87,6 +86,11 @@ public class UserService {
         oldUser.setAge(newUser.getAge());
         oldUser.setEmail(newUser.getEmail());
 
+        // 【新增逻辑】如果前端传了新头像，就更新它
+        if (newUser.getAvatarUrl() != null) {
+            oldUser.setAvatarUrl(newUser.getAvatarUrl());
+        }
+
         User updatedUser = userRepository.save(oldUser);
 
         // 【新增逻辑】数据库更新了数据，立马删除旧缓存！
@@ -97,13 +101,21 @@ public class UserService {
 
     public User login(String username, String password) {
         User user = userRepository.findByUsername(username);
-
         if (user == null) {
             return null;
         }
-
         if (!passwordEncoder.matches(password, user.getPassword())) {
             return null;
+        }
+
+        // 【核心提拔逻辑】：如果登录的是 admin，且他还没有角色，直接升为超级管理员并保存！
+        if ("admin".equals(user.getUsername()) && !"ADMIN".equals(user.getRole())) {
+            user.setRole("ADMIN");
+            userRepository.save(user);
+        } else if (user.getRole() == null) {
+            // 其他老用户如果没有角色，默认设为普通员工
+            user.setRole("USER");
+            userRepository.save(user);
         }
 
         return user;
@@ -123,6 +135,26 @@ public class UserService {
         userRepository.deleteById(id);
 
         // 【新增逻辑】数据库删除了数据，立马删除旧缓存！
+        redisCacheService.delete(ALL_USERS_CACHE_KEY);
+    }
+    // ================= 【新增：批量导入用户】 =================
+    // @Transactional 注解保证事务：要么这批人全导入成功，要么报错全不导入
+    @org.springframework.transaction.annotation.Transactional
+    public void importUsers(List<User> userList) {
+        for (User user : userList) {
+            // 简单查重：如果数据库里已经有这个用户名了，就跳过
+            if (userRepository.findByUsername(user.getUsername()) == null) {
+                // 给导入的用户设置一个默认初始密码，比如 123456
+                user.setPassword(passwordEncoder.encode("123456"));
+
+                // 为了防止 Excel 里有些必填字段没填导致报错，给点默认值
+                if (user.getAge() == null) user.setAge(18);
+                if (user.getEmail() == null) user.setEmail(user.getUsername() + "@example.com");
+
+                userRepository.save(user);
+            }
+        }
+        // 数据库大批量更新了，一定要记得清空 Redis 缓存！
         redisCacheService.delete(ALL_USERS_CACHE_KEY);
     }
 }

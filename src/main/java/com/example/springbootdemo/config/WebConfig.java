@@ -14,7 +14,8 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(
                         "/api/users/login",
-                        "/api/users/register"
+                        "/api/users/register",
+                        "/api/files/**" // 【关键修复】给头像上传和预览开绿灯！
                 );
     }
 }
